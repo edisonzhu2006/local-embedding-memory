@@ -1,0 +1,8 @@
+params:
+  device: cuda
+  backend: null
+  batch_size: 64
+  fp_16: false
+  emb_dim: 1024
+  vlm_text_prompts: ""
+  vlm_image_prompts: "Imagine the scene."

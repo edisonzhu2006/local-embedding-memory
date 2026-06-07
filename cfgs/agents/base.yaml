@@ -1,0 +1,4 @@
+params:
+  type: null
+  add_score_info: false
+  text_emb_model: null

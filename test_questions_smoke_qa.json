@@ -1,0 +1,187 @@
+{
+  "start_time": 1,
+  "end_time": 440000000,
+  "frame_num": 546,
+  "data": [
+    {
+      "id": "L1_1",
+      "question": "Where is the purple chair?",
+      "answer_ts": [],
+      "answer_pos": [[2.11, 1.12, 0.44]],
+      "answer_file": [],
+      "category": "L1_direct",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L1_2",
+      "question": "Where is the toilet?",
+      "answer_ts": [],
+      "answer_pos": [[-0.28, -2.90, 0.44]],
+      "answer_file": [],
+      "category": "L1_direct",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L1_3",
+      "question": "Where is the white sofa?",
+      "answer_ts": [],
+      "answer_pos": [[4.45, -0.58, 0.44], [5.99, 0.09, 0.44]],
+      "answer_file": [],
+      "category": "L1_direct",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L1_4",
+      "question": "Where are the kitchen cabinets?",
+      "answer_ts": [],
+      "answer_pos": [[4.92, -5.40, 0.44]],
+      "answer_file": [],
+      "category": "L1_direct",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L2_1",
+      "question": "Where can I sit down comfortably?",
+      "answer_ts": [],
+      "answer_pos": [[2.11, 1.12, 0.44], [4.45, -0.58, 0.44], [5.99, 0.09, 0.44]],
+      "answer_file": [],
+      "category": "L2_indirect",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L2_2",
+      "question": "Where can I wash my hands?",
+      "answer_ts": [],
+      "answer_pos": [[-0.28, -2.90, 0.44]],
+      "answer_file": [],
+      "category": "L2_indirect",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L2_3",
+      "question": "Where is something I could use to watch the news?",
+      "answer_ts": [],
+      "answer_pos": [[4.30, -0.37, 0.44], [6.96, -4.65, 0.44], [7.08, -4.58, 0.44]],
+      "answer_file": [],
+      "category": "L2_indirect",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L2_4",
+      "question": "Where is the brightest area in the home?",
+      "answer_ts": [],
+      "answer_pos": [],
+      "answer_file": [],
+      "category": "L2_indirect",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L3_1",
+      "question": "What room is closest to the entry?",
+      "answer_ts": [],
+      "answer_pos": [[0.0, 0.0, 0.44], [2.11, 1.12, 0.44]],
+      "answer_file": [],
+      "category": "L3_spatial",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L3_2",
+      "question": "Where would I go to get from the kitchen to the bathroom?",
+      "answer_ts": [],
+      "answer_pos": [[2.0, -4.0, 0.44]],
+      "answer_file": [],
+      "category": "L3_spatial",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L3_3",
+      "question": "Which area has the most furniture?",
+      "answer_ts": [],
+      "answer_pos": [[4.30, -0.37, 0.44], [5.99, 0.09, 0.44], [6.99, 0.43, 0.44]],
+      "answer_file": [],
+      "category": "L3_spatial",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L3_4",
+      "question": "Where is the seating area that faces the TV?",
+      "answer_ts": [],
+      "answer_pos": [[4.30, -0.37, 0.44], [5.99, 0.09, 0.44]],
+      "answer_file": [],
+      "category": "L3_spatial",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L4_1",
+      "question": "I need to make coffee and sit down to drink it. Where should I go first?",
+      "answer_ts": [],
+      "answer_pos": [[4.87, -5.33, 0.44], [5.15, -5.47, 0.44]],
+      "answer_file": [],
+      "category": "L4_multistep",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L4_2",
+      "question": "If I spill water on the kitchen floor, where would I find something to clean it up?",
+      "answer_ts": [],
+      "answer_pos": [[4.87, -5.33, 0.44], [-0.28, -2.90, 0.44]],
+      "answer_file": [],
+      "category": "L4_multistep",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L4_3",
+      "question": "Where did the agent start its exploration?",
+      "answer_ts": [],
+      "answer_pos": [[0.0, 0.0, 0.44]],
+      "answer_file": [],
+      "category": "L4_multistep",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L4_4",
+      "question": "If I am at the toilet and hear the TV, which direction would I walk?",
+      "answer_ts": [],
+      "answer_pos": [[4.30, -0.37, 0.44], [6.96, -4.65, 0.44]],
+      "answer_file": [],
+      "category": "L4_multistep",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L5_1",
+      "question": "Find a chair that is NOT in the kitchen.",
+      "answer_ts": [],
+      "answer_pos": [[2.11, 1.12, 0.44], [4.45, -0.58, 0.44]],
+      "answer_file": [],
+      "category": "L5_negation",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L5_2",
+      "question": "There are multiple seating options. Find the one closest to the bathroom.",
+      "answer_ts": [],
+      "answer_pos": [[2.11, 1.12, 0.44]],
+      "answer_file": [],
+      "category": "L5_negation",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L5_3",
+      "question": "Find a flat surface that is NOT a floor.",
+      "answer_ts": [],
+      "answer_pos": [[4.87, -5.33, 0.44], [5.15, -5.47, 0.44]],
+      "answer_file": [],
+      "category": "L5_negation",
+      "query_img": "unknown"
+    },
+    {
+      "id": "L5_4",
+      "question": "Where did the agent spend the most time during its exploration?",
+      "answer_ts": [],
+      "answer_pos": [[0.0, 0.0, 0.44]],
+      "answer_file": [],
+      "category": "L5_negation",
+      "query_img": "unknown"
+    }
+  ]
+}

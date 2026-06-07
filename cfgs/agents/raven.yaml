@@ -1,0 +1,5 @@
+_base_: base.yaml
+params:
+  type: raven
+  add_score_info: true
+  text_emb_model: sota  # Uses QQMM embeddings

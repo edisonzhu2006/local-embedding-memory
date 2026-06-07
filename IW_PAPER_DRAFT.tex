@@ -1,0 +1,390 @@
+\documentclass[11pt]{article}
+
+% --- packages ----------------------------------------------------------------
+\usepackage[margin=1in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{caption}
+\usepackage{titlesec}
+\usepackage{abstract}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  urlcolor=blue!60!black,
+  citecolor=blue!60!black,
+}
+
+% Code listing style
+\definecolor{codebg}{rgb}{0.96,0.96,0.96}
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  framesep=3pt,
+  columns=fullflexible,
+  breaklines=true,
+  showstringspaces=false,
+  xleftmargin=0pt,
+  xrightmargin=0pt,
+}
+
+\titleformat*{\section}{\Large\bfseries}
+\titleformat*{\subsection}{\large\bfseries}
+\titleformat*{\subsubsection}{\normalsize\bfseries}
+
+% --- metadata ----------------------------------------------------------------
+\title{\bfseries Open-Source VLMs in Visuo-Spatial-Temporal Memory:\\
+An Evaluation of RAVEN on DARPA TIAMAT Simulation Data}
+\author{Edison Zhu\\ \small Princeton University}
+\date{Independent Work --- Draft}
+
+% ============================================================================
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Retrieval-augmented memory systems for embodied agents, such as \textbf{RAVEN} (Hu et al., RSS~2026), store per-frame visual embeddings alongside pose and timestamp in a vector database, then use a vision-language model (VLM) as a tool-using agent to answer queries over long robot trajectories. RAVEN's published evaluation primarily benchmarks closed-source VLMs (Gemini, GPT) and reports that \emph{medium-sized} open VLMs can underperform an embedder-only retrieval floor. In this independent work we (i)~extend RAVEN's open-VLM coverage with five locally-served backbones (Gemma~3 12B/27B, Gemma~4 26B/31B, Qwen2.5-VL 3B/32B, Qwen3-VL~32B) inside the DARPA TIAMAT simulation harness, (ii)~author a purpose-built 20-question, five-level evaluation suite over a short Habitat trajectory designed to localize \emph{where} along the difficulty curve an LLM stops being optional, and (iii)~report quantitative grading (strict~$\leq$~2~m, semi-true 2--3.5~m, wrong $>$3.5~m) and a qualitative diagnostic readout of the agent's retrieval and reasoning behavior. Our results corroborate RAVEN's claim that retrieval is not the bottleneck for open VLMs on this scene, localize the failure to agent-side issues (retrieval loops, missing coordinate plumbing) rather than the VLM itself, and give a practical recommendation for DARPA-style offline deployments.
+\end{abstract}
+
+% ============================================================================
+\section{Introduction}
+
+Long-horizon robot deployment requires a memory that is \textbf{compact} (can scale to days of experience), \textbf{grounded in space and time} (to support navigation), and \textbf{information-rich} (to preserve open-vocabulary visual detail). The two dominant families are \emph{explicit} semantic maps (fixed-vocabulary labels over point clouds or grids) and \emph{captioning-based} pipelines (ReMEmbR~\cite{anwar2024remembr}) that translate frames into text before storing embeddings. The former is limited to its vocabulary; the latter introduces a \textbf{captioning bottleneck} --- textures, layouts, and fine details that cannot be concisely verbalized are lost before retrieval ever begins.
+
+RAVEN (\emph{RetrievAl via Visual Embeddings for Navigation})~\cite{hu2026raven} bypasses captioning entirely: raw RGB frames are encoded by a multimodal embedder (e.g., QQMM-v2, SigLIP, Seed1.6-Embed) and stored in a vector database as visuo-spatial-temporal triplets $(p_i, t_i, z_i, o_i)$. At query time, a VLM agent iteratively invokes four retrieval primitives --- text-based, image-based, time-based, and position-based --- until accumulated evidence is sufficient to emit an answer.
+
+The RAVEN paper evaluates primarily closed VLMs (Gemini-2.5-Flash, Gemini-3-Pro, GPT-5.2) on the RAVEN-QA, FindingDory, and NaVQA benchmarks, with partial open-VLM coverage (Gemma3-27B, Qwen3-VL-32B). It reports an important negative result (\S5.3): \emph{``medium-sized open VLMs underperform embedder-only baselines''}, and recommends the embedder-only pipeline for offline deployments. This observation is the starting point of our work.
+
+\paragraph{Contributions.} This independent work makes three scoped contributions:
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Open-VLM extension of RAVEN on DARPA TIAMAT simulation data.} We integrate five locally-served open VLMs into the RAVEN harness via Ollama, add per-model YAML configs to the framework, and run each against a Habitat smoke trajectory.
+  \item \textbf{A difficulty-stratified evaluation suite (L1--L5).} We design 20 questions over the scene that specifically separate retrieval-solvable queries from queries that require multi-step, temporal, or negation reasoning, with multi-position ground truth and a three-bucket grading scheme.
+  \item \textbf{Failure-mode diagnosis.} We produce a qualitative readout identifying agent-side failure patterns --- most prominently \emph{retrieval loops} where the VLM re-issues identical queries rather than diversifying --- that are tractable without retraining.
+\end{enumerate}
+
+We emphasize that this work is a \textbf{replication-and-extension study}, not a novel method. The retrieval substrate, tool-use loop, and embedder-only baseline are all from the RAVEN paper; our contribution is the open-VLM extension on DARPA sim data and the diagnostic evaluation over it.
+
+% ============================================================================
+\section{Background and Related Work}
+
+\subsection{Memory representations for embodied agents}
+Classical approaches attach discrete semantic labels to metric maps --- point clouds, occupancy grids, or topological graphs --- and suffer from closed-vocabulary limitations: out-of-vocabulary objects cannot be retrieved at all. Open-vocabulary methods replace the closed label set with text embeddings derived from captions (e.g., ReMEmbR~\cite{anwar2024remembr}), but the image-to-text step discards visual detail. A separate line (CLIP-Fields) grounds features in a learned 3D field but requires per-scene optimization, limiting scalability. RNN-based memories struggle with long-term forgetting; retrieval-free long-context VLMs fail to scale past their context window.
+
+\subsection{RAVEN}
+RAVEN proposes two design shifts. First, \textbf{embeddings, not captions}: modern multimodal encoders are sufficiently aligned with language that raw visual embeddings can be retrieved with text queries directly, skipping the lossy captioning step. Second, \textbf{retrieval, not attention}: instead of passing all frames to a long-context VLM, the agent invokes targeted retrieval tools and operates over a \emph{working memory} of retrieved frames, achieving sub-linear retrieval complexity and order-of-magnitude higher memory efficiency.
+
+The RAVEN agent loop maintains context $R_\tau$, parses the query, and either emits an answer or issues a retrieval call. Retrieval primitives:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Text-based.} VLM proposes a query $\hat{q}$; system computes $\hat{z}_q = f_{\text{enc}}(\hat{q})$ and returns top-$K$ frames by cosine distance $1 - \langle \hat{z}_q, z_i \rangle$.
+  \item \textbf{Image-based.} Same, but with an image query.
+  \item \textbf{Time-based.} Returns $K$ \emph{consecutive} frames from a queried timestamp. The paper notes this performs better than nearest-neighbor retrieval in time.
+  \item \textbf{Position-based.} Returns $K$ spatial nearest neighbors to a VLM-proposed $(\hat{x}, \hat{y}, \hat{z})$.
+\end{itemize}
+
+Results: RAVEN with QQMM-v2 outperforms ReMEmbR by up to $\sim$30\% on hard queries, maintains quality as memory scales to $\sim$3{,}000 frames (FindingDory long subset) where VLM-only degrades, and achieves $\geq$97\% success on real Unitree Go1 rollouts. The paper's key concession is that open medium-sized VLMs (Gemma3-27B, Qwen3-VL-32B) can underperform embedder-only retrieval, particularly on Habitat-simulation splits.
+
+\subsection{Where this work fits}
+This independent work sits in the RAVEN author-identified gap: \emph{if open-VLM RAVEN is already near the embedder-only floor, what is actually driving the loss?} Is it (a)~the retrieval backbone transferring poorly to new simulation data, (b)~the VLM's language understanding, (c)~the VLM's tool-use strategy, or (d)~agent/framework plumbing? Our evaluation is designed to separate these.
+
+% ============================================================================
+\section{Method}
+
+\subsection{Environment and base system}
+We evaluate inside the \textbf{DARPA TIAMAT} competition stack, using the \texttt{remembr\_static\_eval\_vlm.py} harness and the \texttt{darpa\_vlm\_prompts} prompt set. All code is a fork of the RAVEN authors' reference implementation; no retrieval, tool, or prompt changes are introduced. Our changes are limited to YAML config additions and eval-harness inputs.
+
+\subsection{Memory construction}
+The \textbf{smoke\_v2} trajectory (546 egocentric Habitat frames, $\sim$7.5\,min) covers an indoor residential scene: entry/hallway, living room (TV, sofa, chairs, fireplace), kitchen (cabinets, counters, sink), bathroom (toilet, sink), and a dining transition area. Per-frame poses are in \texttt{position\_data\_habitat\_smoke\_v2.csv}.
+
+Each frame is embedded with \textbf{QQMM-embed-v2} (3584-dim;  \texttt{youzexue/QQMM-embed-v2}) and indexed into FAISS~\cite{johnson2019faiss} as a triplet $(p_i, t_i, z_i, o_i)$ per the RAVEN memory schema. Top-$K$ is set to 5 throughout, using cosine distance.
+
+\subsection{Reasoning backbones}
+Five open-source VLMs are integrated by adding YAML configs that reference Ollama-served model tags. The harness instantiates each as the reasoning LLM inside the RAVEN tool-use loop (Table~\ref{tab:vlms}).
+
+\begin{table}[h]
+\centering
+\small
+\caption{Open-source VLMs integrated into the RAVEN harness for this study.}
+\label{tab:vlms}
+\begin{tabular}{lll}
+\toprule
+\textbf{Size class} & \textbf{Model} & \textbf{Ollama tag} \\
+\midrule
+Small  & Gemma 3 1B          & \texttt{gemma3:1b} \\
+       & Qwen2.5-VL 3B       & \texttt{qwen2.5vl:3b} \\
+Medium & Gemma 3 12B         & \texttt{gemma3:12b} \\
+Large  & Gemma 3 27B         & \texttt{gemma3:27b} \\
+       & Gemma 4 26B         & \texttt{gemma4:26b} \\
+       & Gemma 4 31B         & \texttt{gemma4:31b} \\
+       & Qwen2.5-VL 32B (4-bit) & \texttt{qwen2.5vl:32b-q4\_K\_M} \\
+       & Qwen3-VL 32B (4-bit)   & \texttt{qwen3-vl:32b-instruct-q4\_K\_M} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Hardware: 2$\times$NVIDIA L40 (Ollama on GPU~0, QQMM embedder on GPU~1).
+
+\subsection{Evaluation suite (L1--L5)}
+Public benchmarks (RAVEN-QA, NaVQA, FindingDory) are not available for the DARPA sim trajectory, and the RAVEN-QA category taxonomy (dominant / secondary / reasoning / info-recall / spatial) pools fundamentally different \emph{failure modes}. We author a \textbf{20-question, five-level suite} over the \texttt{smoke\_v2} scene designed to isolate specific capabilities (Table~\ref{tab:levels}).
+
+\begin{table}[h]
+\centering
+\small
+\caption{The L1--L5 evaluation structure. Each level contains four questions (20 total).}
+\label{tab:levels}
+\begin{tabularx}{\textwidth}{llXl}
+\toprule
+\textbf{Level} & \textbf{Name} & \textbf{Capability probed} & \textbf{Example} \\
+\midrule
+L1 & Direct                  & Object recall from keyword                    & ``Where is the purple chair?'' \\
+L2 & Indirect / attribute    & Concept~$\rightarrow$~object mapping          & ``Where can I sit comfortably?'' \\
+L3 & Spatial                 & Relational reasoning over scene               & ``What room is closest to the entry?'' \\
+L4 & Multi-step              & Composed inference (often temporal)           & ``Where did the agent start?'' \\
+L5 & Negation / disambig.    & Filter or exclusion over retrieval            & ``Find a chair NOT in the kitchen.'' \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Ground truth is multi-position (a question may have 2--3 acceptable $(x, y, z)$ answers) so ``right room, wrong exact pose'' is gradable distinctly from ``wrong room entirely.'' One question per level is specifically adversarial to a single RAVEN capability --- e.g., L4.3 (\emph{``Where did the agent start its exploration?''}) is unanswerable by text retrieval alone and forces the \textbf{time-based retriever}; L5.4 (\emph{``Where did the agent spend the most time?''}) forces temporal-statistical reasoning over the trajectory.
+
+\paragraph{Grading.} Given predicted position $\hat{p}$ and ground-truth set $\{p^*_j\}$:
+\begin{equation}
+d = \min_j \|\hat{p} - p^*_j\|_2 \qquad
+\text{correctness} = \begin{cases}
+\text{strict}     & d \leq 2\,\text{m} \\
+\text{semi-true}  & 2 < d \leq 3.5\,\text{m} \\
+\text{wrong}      & d > 3.5\,\text{m}
+\end{cases}
+\end{equation}
+This three-bucket scheme (rather than single 0/1) is critical because dense open VLMs tend to produce the \emph{right room} with a \emph{wrong exact coordinate} --- a failure that deserves a different diagnosis than missing the scene entirely.
+
+\subsection{Baselines}
+Two baselines, both established by the RAVEN paper:
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Embedder-only.} CLIP ViT-L-14~\cite{radford2021clip} and SigLIP-384~\cite{zhai2023siglip} with no LLM --- top-1 retrieval on the user query embedding. Establishes the retrieval floor.
+  \item \textbf{ReMEmbR~\cite{anwar2024remembr}.} Caption-based baseline using the same 20-question set.
+\end{itemize}
+
+% ============================================================================
+\section{Experiments}
+
+\subsection{Embedder-only baseline}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Embedder-only retrieval on the 20-question DARPA sim suite.}
+\label{tab:embonly}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Model} & \textbf{Dim} & \textbf{Mean similarity} \\
+\midrule
+CLIP ViT-L-14 (OpenAI)            & 768  & 0.205 \\
+SigLIP-384 (ViT-SO400M-14)        & 1152 & 0.108 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Observation 1.} Contrastive CLIP achieves $\sim$2$\times$ SigLIP's absolute similarity on the DARPA sim data, inverting the relative ordering seen on some web benchmarks. This is consistent with a sim-to-real gap: SigLIP's training distribution is heavier on natural photographs, while contrastive CLIP generalizes more evenly to the rendered Habitat imagery.
+
+\textbf{Observation 2.} Absolute similarities (0.07--0.23) sit noticeably below the $\sim$0.3 range typical on real-world benchmarks --- a quantitative fingerprint of the sim-to-real distributional shift.
+
+\subsection{RAVEN + open VLM}
+Full RAVEN agent runs on QQMM-embed-v2 with three Gemma backbones (Table~\ref{tab:gemma}). Counts are over questions where the model returned a gradable coordinate.
+
+\begin{table}[h]
+\centering
+\small
+\caption{RAVEN+Gemma on QQMM-embed-v2 over the 20-question DARPA suite.}
+\label{tab:gemma}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Params} & \textbf{Strict $\leq$2\,m} & \textbf{Semi-true 2--3.5\,m} & \textbf{Wrong $>$3.5\,m} \\
+\midrule
+Gemma 3 12B      & 12B & 2/17 & 2/17 & 13/17 \\
+Gemma 4 26B      & 26B & 3/19 & 3/19 & 13/19 \\
+\textbf{Gemma 4 31B} & \textbf{31B} & \textbf{2/17} & \textbf{6/17} & \textbf{9/17} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Observation 3.} Strict accuracy does not improve with scale, but the \emph{semi-true} bucket grows substantially at 31B --- the model moves from ``wrong room'' to ``right room, offset pose''. This is evidence that the scaling gain for open VLMs in RAVEN is in \emph{coarse spatial grounding}, not fine pose prediction.
+
+\textbf{Observation 4.} Independent qualitative grading of retrieved frames (were the correct frames in the top-$K$ retrieval at all, regardless of final coordinate?) gives \textbf{13/20 correct, 4/20 partial, 3/20 incorrect} for Gemma~4 31B. This is notably higher than the strict coordinate accuracy --- confirming retrieval is not the bottleneck.
+
+\subsection{Per-level breakdown}
+Agent behavior by difficulty level (Gemma 4 31B + QQMM):
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{L1 (direct).} Near-ceiling: all four objects are retrieved in top-3. Embedder-only also succeeds on L1, matching RAVEN's \S5.3 observation that embedder-only is competitive on easy queries.
+  \item \textbf{L2 (indirect).} Strong. The VLM translates \emph{``watch the news''} $\rightarrow$ \texttt{``television''}, \emph{``sit down comfortably''} $\rightarrow$ \texttt{``comfortable seating''}, \emph{``wash my hands''} $\rightarrow$ \texttt{``sink''}. Concept-to-object generalization via QQMM survives the sim-to-real gap.
+  \item \textbf{L3 (spatial).} Mixed. The agent produces correct \emph{prose} answers (``the entryway'', ``the living room'') but frequently omits coordinates --- a framework plumbing issue (see \S\ref{sec:failures}).
+  \item \textbf{L4 (multi-step).} The standout result: \emph{``Where did the agent start its exploration?''} is the \textbf{only} query in the suite where the model spontaneously pivoted off text retrieval. After \texttt{"start of exploration"} returned generic frames, it called \texttt{retrieve\_from\_time("00:00:00")} and landed on \texttt{frame\_000000}. This is a positive existence proof that open VLMs \emph{can} orchestrate multi-tool strategies; we discuss below why it happens rarely.
+  \item \textbf{L5 (negation).} The model reformulates rather than filters: \emph{``flat surface that is NOT a floor''} $\rightarrow$ \texttt{``a flat surface like a table or a counter''}. For \emph{``chair NOT in kitchen''}, the model retrieves chair frames and verbally verifies ``not in the kitchen'' --- behavior that was inconsistent across seeds.
+\end{itemize}
+
+\subsection{Frame reuse analysis}
+A striking qualitative finding is that the 31B model consistently re-retrieves the same \emph{landmark} frames for semantically related queries (Table~\ref{tab:reuse}).
+
+\begin{table}[h]
+\centering
+\small
+\caption{Landmark frame reuse across semantically related questions (Gemma 4 31B + QQMM).}
+\label{tab:reuse}
+\begin{tabularx}{\textwidth}{lX}
+\toprule
+\textbf{Landmark} & \textbf{Queries it is retrieved for} \\
+\midrule
+\texttt{frame\_000238} (red/purple chair) & L1.1, L2.1, L5.1, L5.2 \\
+\texttt{frame\_000628} (toilet)           & L1.2, L2.2, L3.2, L4.4 \\
+\texttt{frame\_000753} (TV living room)   & L2.3, L2.4, L3.3, L3.4 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+This is interpretable as the VLM maintaining an implicit \emph{landmark map} of the scene: once QQMM localizes a canonical frame for an object concept, the agent re-indexes into it across queries rather than treating each query from scratch. This is consistent with RAVEN's design intent.
+
+% ============================================================================
+\section{Failure-Mode Diagnosis}
+\label{sec:failures}
+
+Localizing \emph{why} the open-VLM RAVEN loses ground to closed models:
+
+\begin{enumerate}[leftmargin=*,itemsep=3pt]
+  \item \textbf{Retrieval loops dominate the failure cases.} On questions that fail, the VLM re-issues the \emph{identical} query 4--6 times rather than varying phrasing or switching tools. We observed \texttt{"coffee machine"} repeated 6$\times$ in one L4 trace and \texttt{"entryway"} repeated 6$\times$ in another, always with the same top-$K$ frames returned. The tool-use loop has no backoff, no query-diversification prior, and no evidence-accumulation criterion that prevents immediate re-querying.
+  \item \textbf{Prose-without-coordinates.} L3\_1 and L3\_3 produced correct room-level answers (``the entryway'', ``the living room'') but no $(x, y, z)$. The evaluator --- which is strictly coordinate-based --- scores these as wrong. This is a \emph{framework} failure, not a VLM failure: a coordinate-extraction fallback (e.g., centroid of retrieved frames' poses) would salvage these cases.
+  \item \textbf{Correct frames, offset coordinates.} The retrieved frames are right but the reported coordinate drifts from GT. This is consistent with a metadata-extraction bug in the answer-formulation path, not reasoning failure.
+  \item \textbf{Texture--surface confusion.} For L5\_3 the model correctly read marble texture but mislabeled a marble floor as a countertop. This is an embedder-side ambiguity and cannot be fixed at the agent layer.
+  \item \textbf{Rare multi-tool strategy.} Only 1/20 queries triggered a non-text retriever. The time and position retrievers are under-used, implying the system prompt or tool descriptions do not sufficiently prime the VLM to reach for them when text fails.
+\end{enumerate}
+
+% ============================================================================
+\section{Discussion}
+
+\subsection{Why the embedder-only floor is high on L1--L2}
+The RAVEN paper's negative result --- \emph{medium open VLMs $\approx$ embedder-only} --- reproduces on our DARPA sim data for L1 direct queries. The mechanism is visible: QQMM's top-1 retrieval for a keyword query already lands on the correct frame, so a VLM that simply parrots the retrieved frame's location is no better than retrieval-only. \textbf{The LLM adds value precisely at L3--L5}, where retrieval alone is insufficient: spatial relationships, multi-step composition, and negation.
+
+\subsection{What scales with VLM size}
+Our three Gemma data points suggest strict accuracy is roughly flat ($2/17 \to 3/19 \to 2/17$) but \emph{coarse spatial accuracy} (strict~+~semi-true) improves at 31B ($4/17 \to 6/19 \to 8/17$). Paired with the frame-reuse finding, we interpret this as: larger models form and consult a more stable internal landmark map, bringing answers to the right room more often --- but the final coordinate plumbing is the bottleneck after that.
+
+\subsection{Actionable recommendations for the framework}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Query diversification.} After $K$ consecutive identical retrievals, force a prompt-level rewrite (e.g., alternate query candidates from the VLM before re-issuing).
+  \item \textbf{Coordinate fallback.} When the VLM returns a textual room name with no coordinate, emit the centroid of the retrieved frames' poses. This salvages all observed L3 failures.
+  \item \textbf{Tool-use priming.} Add few-shot exemplars in \texttt{agent\_system\_prompt.txt} specifically showing the time and position retrievers being used after an initial text retrieval fails.
+\end{itemize}
+None of the above requires fine-tuning the VLM and none touches the retrieval substrate.
+
+\subsection{Limitations}
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Single scene, 546 frames.} Our eval is one trajectory; the RAVEN paper's scale claims (up to $\sim$3k frames on FindingDory long) are not probed here.
+  \item \textbf{Variance not fully quantified.} We report qualitative observations across runs but do not report per-model standard deviations on the DARPA suite (the RAVEN paper reports $\pm 3$--$6\%$ for open VLMs; we expect similar).
+  \item \textbf{Sim-to-real gap.} All results are on Habitat-rendered frames; the RAVEN paper's real-robot results ($>$97\% success on Unitree Go1) are separate and not replicated here.
+  \item \textbf{Replication, not novel method.} The retrieval substrate, the tool-use loop, the embedder-only baseline, and the L1--L5 taxonomy concept (which echoes RAVEN-QA's category structure) are all established. Our contribution is the open-VLM coverage on new evaluation data and the failure-mode diagnosis.
+\end{itemize}
+
+% ============================================================================
+\section{Future Work}
+
+\begin{itemize}[leftmargin=*,itemsep=2pt]
+  \item \textbf{Confidence-gated routing between embedder-only and VLM agent.} Our per-level breakdown shows embedder-only retrieval is already competitive with the full VLM reasoning loop on L1--L2 queries, while L3--L5 is where the VLM earns its cost. The natural next step is to route at inference time: run the embedder first, gate on the top-1 vs top-2 similarity margin (or an answer-shape check --- does the retrieved frame's metadata parse into the expected coordinate/room-name shape?), and only escalate to the VLM agent loop when the gate fails. The signal is free --- no fine-tuning, no labeled training set, one tunable threshold --- and it directly attacks the dominant cost driver (repeated VLM calls during tool use) without exposing the system to a learned classifier's silent-failure mode on hard queries. A simple keyword heuristic over the question (spatial relations, negation, counting, multi-step composition $\to$ VLM; bare entity lookup $\to$ embedder) is a useful baseline to publish alongside the confidence gate. A learned classifier trained on the L1--L5 taxonomy is a stretch goal but would need a substantially larger labeled set than the 20 questions used here to be defensible.
+  \item \textbf{Joint integration with full RAVEN.} Crucially, this routing layer should be added to the full RAVEN system \emph{jointly} with the \S6.3 recommendations (query diversification, coordinate fallback, tool-use priming) rather than as disjoint patches. The four changes interact: the coordinate fallback shortens the VLM path that the gate is trying to avoid in the first place, query diversification reduces the retrieval-loop failures that the gate would otherwise misclassify as ``high confidence,'' and tool-use priming changes which queries are actually reasoning-required. Evaluating them together on the same suite is the only way to measure their combined lift versus the additive estimate.
+  \item \textbf{Variance and scale.} Replicate on multiple TIAMAT trajectories and on a FindingDory-sized memory ($\sim$3k frames) with per-model standard deviations.
+\end{itemize}
+
+% ============================================================================
+\section{Conclusion}
+We extended the RAVEN evaluation to locally-served open-source VLMs over DARPA TIAMAT simulation data, authored a difficulty-stratified 20-question suite designed to separate retrieval-solvable from reasoning-required queries, and diagnosed open-VLM failure modes as predominantly \emph{agent-side} --- retrieval loops, coordinate plumbing gaps, and under-used non-text retrievers --- rather than retrieval-substrate or base-VLM failures. The practical implication is that offline, air-gapped deployments of RAVEN on open models can likely close most of the gap to closed-VLM performance without retraining, via three framework-level changes to query diversification, coordinate fallback, and tool-use priming. The embedder-only pipeline remains a competitive fallback for L1 queries, consistent with RAVEN's own recommendation.
+
+% ============================================================================
+\begin{thebibliography}{9}
+
+\bibitem{hu2026raven}
+Y.~Hu, Z.~Zheng, L.~Zha, C.~Xing, R.~Singh, O.~Hossain, A.~Loquercio, and D.~Shah.
+\newblock {RAVEN}: Long-Horizon Reasoning and Navigation with a Visuo-Spatial-Temporal Memory.
+\newblock In \emph{Robotics: Science and Systems (RSS)}, 2026.
+\newblock Code: \url{https://github.com/zzcnewly/RAVEN}.
+
+\bibitem{anwar2024remembr}
+A.~Anwar et al.
+\newblock {ReMEmbR}: Building and Reasoning Over Long-Horizon Spatio-Temporal Memory for Robot Navigation.
+\newblock 2024.
+
+\bibitem{yadav2024findingdory}
+K.~Yadav et al.
+\newblock {FindingDory}: A Benchmark for Memory-Based Navigation.
+\newblock 2024.
+
+\bibitem{radford2021clip}
+A.~Radford et al.
+\newblock Learning Transferable Visual Models from Natural Language Supervision.
+\newblock In \emph{ICML}, 2021.
+
+\bibitem{zhai2023siglip}
+X.~Zhai et al.
+\newblock Sigmoid Loss for Language-Image Pre-training.
+\newblock In \emph{ICCV}, 2023.
+
+\bibitem{qqmm2025}
+Z.~Xue et al.
+\newblock {QQMM}: Qwen-based Navigation Memory Model (QQMM-embed-v2).
+\newblock \url{https://huggingface.co/youzexue/QQMM-embed-v2}, 2025.
+
+\bibitem{johnson2019faiss}
+J.~Johnson, M.~Douze, and H.~J\'egou.
+\newblock Billion-scale similarity search with {GPUs}.
+\newblock \emph{IEEE Transactions on Big Data}, 2019.
+
+\bibitem{habitat}
+Habitat AI Challenge / Habitat-Sim.
+\newblock \url{https://aihabitat.org}.
+
+\bibitem{tiamat}
+{DARPA TIAMAT} Competition documentation (internal).
+
+\end{thebibliography}
+
+% ============================================================================
+\appendix
+
+\section{Full Evaluation Question List}
+See \texttt{test\_questions\_smoke.md} for the full 20-question specification with per-question rationale and ground-truth positions, and \texttt{test\_questions\_smoke\_qa.json} for the machine-readable evaluation input.
+
+\section{Per-Model Output Directories}
+All runs are reproducible from \texttt{outputs/smoke\_v2/raven\_results/20q/}:
+\begin{itemize}[leftmargin=*,itemsep=1pt]
+  \item \texttt{gemma12b\_qqmm/}
+  \item \texttt{gemma27b\_qqmm/}
+  \item \texttt{gemma27b\_vith14/} --- CLIP ablation
+  \item \texttt{gemma4\_26b\_qqmm/}
+  \item \texttt{gemma4\_31b\_qqmm/} --- primary result, with \texttt{GEMMA4\_31B\_FINDINGS.md}
+  \item \texttt{qwen25vl3b\_qqmm/}
+\end{itemize}
+Embedder-only baselines: \texttt{outputs/custom\_eval/} with summary \texttt{EVAL\_REPORT.md}.
+
+\section{Reproduction Command}
+\begin{lstlisting}[language=bash]
+python remembr_static_eval_vlm.py \
+  --vlm_config cfgs/vlms/gemma3-27b.yaml \
+  --embedder_config cfgs/embedders/qqmm.yaml \
+  --agent_config cfgs/agents/raven.yaml \
+  --input_folder ./extracted_videos/smoke_full \
+  --qa_file ./test_questions_smoke_qa.json \
+  --caption_file ./extracted_videos/smoke_full/frames.json \
+  --out_dir ./outputs/smoke_v2/raven_results/20q/gemma27b_qqmm \
+  --memory_backend faiss --top_k 5 --device cuda
+\end{lstlisting}
+Swap \texttt{--vlm\_config} to any of the five configs in \texttt{cfgs/vlms/}.
+
+\end{document}

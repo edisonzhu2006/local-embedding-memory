@@ -1,0 +1,7 @@
+_base_: base.yaml
+params:
+  dataset: darpa
+  input_path: ./data/converted/
+  output_path: ./output/
+  prompt_folder: ./remembr/prompts/darpa_vlm_prompts
+  vlm_prompt_folder: ./remembr/prompts/darpa_vlm_prompts

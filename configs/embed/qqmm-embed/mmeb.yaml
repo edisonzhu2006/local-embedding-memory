@@ -1,0 +1,4 @@
+PROCESSOR_CONFIG:
+  processor_class: "qqmm_nav_qwen2.processing_qqmm.QQMMProcessor"
+  tokenizer_path: "qqmm/models/Qwen2_5-7B-Instruct"
+  image_processor_path: "qqmm/models/Qwen2-VL-7B-Instruct-NaViT"

@@ -1,0 +1,35 @@
+# Large data directories
+extracted_videos/
+outputs/
+output/
+trials/
+
+# Nested git repo (now using root)
+local-embeddings-memory/
+
+# Logs
+*.log
+run_output.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+
+# Environment
+.env
+*.env
+
+# OS
+.DS_Store
+Thumbs.db
+.cache/
+
+# data / outputs (kept out of the public repo)
+outputs/
+extracted_videos/
+trials/
+*.log
+.DS_Store

@@ -1,0 +1,6 @@
+_base_: base.yaml
+params:
+  backend: hf
+  hf_model_id: facebook/dinov2-giant
+  vlm_layer: -1
+  emb_dim: 1536

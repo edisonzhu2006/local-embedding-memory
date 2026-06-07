@@ -1,0 +1,6 @@
+_base_: base.yaml
+params:
+  backend: oc
+  oc_model: ViT-H-14
+  oc_pretrained: laion2b_s32b_b79k
+  emb_dim: 1024

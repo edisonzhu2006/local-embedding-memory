@@ -1,0 +1,11 @@
+# log related
+
+# basic
+_pycache_/
+logs/
+
+# data related
+data_vlm/
+
+# notebook related
+# *.ipynb

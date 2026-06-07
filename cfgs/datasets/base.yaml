@@ -1,0 +1,14 @@
+params:
+  dataset: null
+  input_path: null
+  output_path: null
+  prompt_folder: ./remembr/prompts/darpa_vlm_prompts
+  vlm_prompt_folder: ./remembr/prompts/darpa_vlm_prompts
+  top_k: 5
+  temperature: 0.6
+  num_ctx: 16384
+  max_gen_tokens: 16384
+  max_tool_calls: 3
+  debug: true
+  memory_backend: faiss
+  caption_step_num: 1
