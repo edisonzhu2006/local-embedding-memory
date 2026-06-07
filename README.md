@@ -23,7 +23,7 @@ This repository bundles the research write-ups alongside the code:
 **RAVEN** (Hu et al., RSS 2026 — *Long-Horizon Reasoning and Navigation with Visuo-Spatial-Temporal Memory*) is a retrieval-augmented memory system for embodied agents. As a robot moves through an environment, RAVEN turns its long trajectory into a queryable memory and then lets a vision-language model reason over it.
 
 <p align="center">
-  <img src="raven_system.png" alt="RAVEN System: memory building (video sequence -> multimodal embedder -> visual embeddings + position/time -> memory database) and query (user question -> VLM with time/position/text retrieval tools -> generated answer with navigable coordinates)" width="80%" />
+  <img src="https://raw.githubusercontent.com/edisonzhu2006/local-embedding-memory/main/raven_system.png" alt="RAVEN System: memory building (video sequence -> multimodal embedder -> visual embeddings + position/time -> memory database) and query (user question -> VLM with time/position/text retrieval tools -> generated answer with navigable coordinates)" width="80%" />
 </p>
 
 **How it works:**
