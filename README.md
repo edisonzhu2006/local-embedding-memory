@@ -18,6 +18,22 @@ This repository bundles the research write-ups alongside the code:
 | `CONTRIBUTIONS.md` | Contributions write-up |
 | `RESEARCH_JOURNAL.md` | Research journal / progress log |
 
+## What is RAVEN?
+
+**RAVEN** (Hu et al., RSS 2026 — *Long-Horizon Reasoning and Navigation with Visuo-Spatial-Temporal Memory*) is a retrieval-augmented memory system for embodied agents. As a robot moves through an environment, RAVEN turns its long trajectory into a queryable memory and then lets a vision-language model reason over it.
+
+**How it works:**
+
+1. **Build the memory.** Each frame the robot sees is encoded into a high-dimensional visual embedding and written to a vector database *together with its pose* (x, y, z position + orientation) *and its timestamp*. This pairing of appearance + location + time is the "visuo-spatial-temporal" memory.
+2. **Query it.** Given a natural-language question over the whole trajectory — e.g. *"Where did I last see the rubber duck?"*, *"What was next to the blue chair?"*, *"How long after entering the kitchen did I pass a fire extinguisher?"* — the system retrieves the most relevant frames (top-K) from the vector store.
+3. **Reason with a VLM agent.** A vision-language model acts as a **tool-using agent**: it inspects the retrieved frames, can issue follow-up retrievals to gather more evidence, and then produces an answer — typically grounded as a **coordinate (position) and time**, not just free text.
+
+This decomposition — a fast embedding retriever for *recall* plus a VLM agent for *spatial/temporal/negation reasoning* — is what lets RAVEN answer multi-step questions over minutes-long trajectories that a pure retriever cannot.
+
+### This repository
+
+This is the **ReMEmbR / RAVEN framework implementation** plus an **independent evaluation of open-source VLMs** inside it (Edison Zhu, Princeton ECE Independent Work; adviser Prof. Dhruv Shah, mentor Yixun Hu — a RAVEN co-author). RAVEN's published evaluation mostly benchmarks *closed* VLMs (Gemini, GPT) and reports that mid-sized *open* VLMs can underperform an embedder-only floor. This work probes exactly where the VLM stops being optional: on a difficulty-stratified 19-question Habitat suite from the DARPA TIAMAT simulation harness, **embedder-only retrieval saturates at ~5–7/19**, while **adding the VLM agent on the *same* QQMM retriever lifts it to 15/19 (+42 pp)** — the entire gain concentrated on spatial, multi-step, and negation reasoning (levels L3–L5). See `IW_PAPER_FINAL.md` and the RAVEN paper PDF for the full study.
+
 ## Overview
 
 This framework provides multiple approaches for robot memory and reasoning:
